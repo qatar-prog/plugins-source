@@ -1,11 +1,26 @@
-/*******************************************************************************
- * Copyright (c) 2019 openosrs
- * Redistributions and modifications of this software are permitted as long as this notice remains in its original unmodified state at the top of this file.
- * If there are any questions comments, or feedback about this software, please direct all inquiries directly to the file authors:
- * ST0NEWALL#9112
- * openosrs Discord: https://discord.gg/Q7wFtCe
- * openosrs website: https://openosrs.com
- ******************************************************************************/
+/*
+ * Copyright (c) 2019, St0newall
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 package net.runelite.client.plugins.wildernesslocations;
 
@@ -27,6 +42,7 @@ import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.WorldLocation;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -66,7 +82,7 @@ public class WildernessLocationsPlugin extends Plugin
 	private WildernessLocationsConfig config;
 
 	@Inject
-	private WildernessLocationsOverlay overlay = new WildernessLocationsOverlay(this, config);
+	private WildernessLocationsOverlay overlay;
 
 	@Inject
 	private KeyManager keyManager;
@@ -148,7 +164,7 @@ public class WildernessLocationsPlugin extends Plugin
 
 	private boolean inClanChat()
 	{
-		return client.getWidget(WidgetInfo.CLAN_CHAT_TITLE) != null;
+		return client.getWidget(WidgetInfo.FRIENDS_CHAT_TITLE) != null;
 	}
 
 	private void sendMessage(String text)
@@ -184,5 +200,23 @@ public class WildernessLocationsPlugin extends Plugin
 		sendMessage("/World: " + client.getWorld() + " Location: " + location);
 		currentCooldown = 30;
 	}
-	
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!event.getGroup().equals("wildernesslocations"))
+		{
+			return;
+		}
+
+		if (event.getKey().equals("mirrorMode"))
+		{
+			overlay.determineLayer();
+			wildernessLocationsMapOverlay.determineLayer();
+			overlayManager.remove(wildernessLocationsMapOverlay);
+			overlayManager.remove(overlay);
+			overlayManager.add(overlay);
+			overlayManager.add(wildernessLocationsMapOverlay);
+		}
+	}
 }

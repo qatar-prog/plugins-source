@@ -28,6 +28,7 @@ package net.runelite.client.plugins.ticktimers;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import java.awt.Color;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -43,12 +44,15 @@ import net.runelite.api.Prayer;
 @Getter(AccessLevel.PACKAGE)
 class NPCContainer
 {
-	private NPC npc;
-	private int npcIndex;
-	private String npcName;
+	@Getter(AccessLevel.PACKAGE)
+	private final NPC npc;
+	private final int npcIndex;
+	private final String npcName;
+	private final ImmutableSet<Integer> animations;
+	private final int attackSpeed;
+	@Getter(AccessLevel.PACKAGE)
+	private final BossMonsters monsterType;
 	private int npcSize;
-	private ImmutableSet<Integer> animations;
-	private int attackSpeed;
 	@Setter(AccessLevel.PACKAGE)
 	private int ticksUntilAttack;
 	@Setter(AccessLevel.PACKAGE)
@@ -74,6 +78,7 @@ class NPCContainer
 			throw new IllegalStateException();
 		}
 
+		this.monsterType = monster;
 		this.animations = monster.animations;
 		this.attackStyle = monster.attackStyle;
 
@@ -81,6 +86,27 @@ class NPCContainer
 		{
 			this.npcSize = composition.getSize();
 		}
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return Objects.hash(npc);
+	}
+
+	@Override
+	public boolean equals(Object o)
+	{
+		if (this == o)
+		{
+			return true;
+		}
+		if (o == null || getClass() != o.getClass())
+		{
+			return false;
+		}
+		NPCContainer that = (NPCContainer) o;
+		return Objects.equals(npc, that.npc);
 	}
 
 	@RequiredArgsConstructor
@@ -104,11 +130,7 @@ class NPCContainer
 		FLIGHT_KILISA(NpcID.FLIGHT_KILISA, AttackStyle.MELEE, ImmutableSet.of(AnimationID.KILISA_AUTO)),
 		FLOCKLEADER_GEERIN(NpcID.FLOCKLEADER_GEERIN, AttackStyle.RANGE, ImmutableSet.of(AnimationID.GEERIN_AUTO, AnimationID.GEERIN_FLINCH)),
 		WINGMAN_SKREE(NpcID.WINGMAN_SKREE, AttackStyle.MAGE, ImmutableSet.of(AnimationID.SKREE_AUTO)),
-		KREEARRA(NpcID.KREEARRA, AttackStyle.RANGE, ImmutableSet.of(AnimationID.KREE_RANGED)),
-
-		DAGANNOTH_REX(NpcID.DAGANNOTH_REX, AttackStyle.MELEE, ImmutableSet.of(AnimationID.DAG_REX)),
-		DAGANNOTH_SUPREME(NpcID.DAGANNOTH_SUPREME, AttackStyle.RANGE, ImmutableSet.of(AnimationID.DAG_SUPREME)),
-		DAGANNOTH_PRIME(NpcID.DAGANNOTH_PRIME, AttackStyle.MAGE, ImmutableSet.of(AnimationID.DAG_PRIME));
+		KREEARRA(NpcID.KREEARRA, AttackStyle.RANGE, ImmutableSet.of(AnimationID.KREE_RANGED));
 
 		private static final ImmutableMap<Integer, BossMonsters> idMap;
 

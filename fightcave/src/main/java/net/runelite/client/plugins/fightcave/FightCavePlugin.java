@@ -50,6 +50,7 @@ import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.NPCManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -62,7 +63,7 @@ import org.pf4j.Extension;
 @PluginDescriptor(
 	name = "Fight Cave",
 	enabledByDefault = false,
-	description = "Displays current and upcoming wave monsters in the Fight Caves",
+	description = "Displays current and upcoming wave monsters in the Fight Caves and what to pray at TzTok-Jad",
 	tags = {"bosses", "combat", "minigame", "overlay", "pve", "pvm", "jad", "fire", "cape", "wave"},
 	type = PluginType.PVM
 )
@@ -344,5 +345,25 @@ public class FightCavePlugin extends Plugin
 	private boolean regionCheck()
 	{
 		return ArrayUtils.contains(client.getMapRegions(), FIGHT_CAVE_REGION);
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!event.getGroup().equals("fightcave"))
+		{
+			return;
+		}
+
+		if (event.getKey().equals("mirrorMode"))
+		{
+			waveOverlay.determineLayer();
+			fightCaveOverlay.determineLayer();
+			overlayManager.remove(waveOverlay);
+			overlayManager.remove(fightCaveOverlay);
+			overlayManager.add(waveOverlay);
+			overlayManager.add(fightCaveOverlay);
+
+		}
 	}
 }

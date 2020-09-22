@@ -36,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.ItemID;
 import net.runelite.api.NPC;
 import net.runelite.api.NpcID;
 import net.runelite.api.coords.WorldPoint;
@@ -48,6 +49,8 @@ import net.runelite.api.events.NpcSpawned;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.NPCManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
@@ -56,6 +59,7 @@ import net.runelite.client.plugins.inferno.displaymodes.InfernoSafespotDisplayMo
 import net.runelite.client.plugins.inferno.displaymodes.InfernoWaveDisplayMode;
 import net.runelite.client.plugins.inferno.displaymodes.InfernoZukShieldDisplayMode;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import org.apache.commons.lang3.ArrayUtils;
 import org.pf4j.Extension;
 
@@ -77,6 +81,15 @@ public class InfernoPlugin extends Plugin
 
 	@Inject
 	private OverlayManager overlayManager;
+
+	@Inject
+	private InfoBoxManager infoBoxManager;
+
+	@Inject
+	private ItemManager itemManager;
+
+	@Inject
+	private NPCManager npcManager;
 
 	@Inject
 	private InfernoOverlay infernoOverlay;
@@ -116,8 +129,11 @@ public class InfernoPlugin extends Plugin
 
 	@Getter(AccessLevel.PACKAGE)
 	private boolean finalPhase = false;
+	private boolean finalPhaseTick = false;
+	private int ticksSinceFinalPhase = 0;
 	@Getter(AccessLevel.PACKAGE)
 	private NPC zukShield = null;
+	private NPC zuk = null;
 	private WorldPoint zukShieldLastPosition = null;
 	private WorldPoint zukShieldBase = null;
 	private int zukShieldCornerTicks = -2;
@@ -146,6 +162,8 @@ public class InfernoPlugin extends Plugin
 
 	@Getter(AccessLevel.PACKAGE)
 	private long lastTick;
+
+	private InfernoSpawnTimerInfobox spawnTimerInfoBox;
 
 	@Provides
 	InfernoConfig provideConfig(ConfigManager configManager)
@@ -183,6 +201,8 @@ public class InfernoPlugin extends Plugin
 		overlayManager.remove(jadOverlay);
 		overlayManager.remove(prayerOverlay);
 
+		infoBoxManager.removeInfoBox(spawnTimerInfoBox);
+
 		currentWaveNumber = -1;
 
 		showNpcDeaths();
@@ -215,10 +235,32 @@ public class InfernoPlugin extends Plugin
 				overlayManager.add(waveOverlay);
 			}
 		}
+		if (event.getKey().equals("mirrorMode"))
+		{
+			if (isInInferno())
+			{
+				infernoOverlay.determineLayer();
+				jadOverlay.determineLayer();
+				prayerOverlay.determineLayer();
+				overlayManager.remove(infernoOverlay);
+				overlayManager.remove(jadOverlay);
+				overlayManager.remove(prayerOverlay);
+				overlayManager.add(infernoOverlay);
+				overlayManager.add(jadOverlay);
+				overlayManager.add(prayerOverlay);
+
+				if (config.waveDisplay() != InfernoWaveDisplayMode.NONE)
+				{
+					waveOverlay.determineLayer();
+					overlayManager.remove(waveOverlay);
+					overlayManager.add(waveOverlay);
+				}
+			}
+		}
 	}
 
 	@Subscribe
-	private void onGameTick(GameTick GameTickEvent)
+	private void onGameTick(GameTick event)
 	{
 		if (!isInInferno())
 		{
@@ -244,6 +286,18 @@ public class InfernoPlugin extends Plugin
 
 		centralNibbler = null;
 		calculateCentralNibbler();
+
+		calculateSpawnTimerInfobox();
+
+		//if finalPhaseTick, we will skip incrementing because we already did it in onNpcSpawned
+		if (finalPhaseTick)
+		{
+			finalPhaseTick = false;
+		}
+		else if (finalPhase)
+		{
+			ticksSinceFinalPhase++;
+		}
 	}
 
 	@Subscribe
@@ -254,51 +308,71 @@ public class InfernoPlugin extends Plugin
 			return;
 		}
 
-		if (event.getNpc().getId() == NpcID.ANCESTRAL_GLYPH)
+		final int npcId = event.getNpc().getId();
+
+		if (npcId == NpcID.ANCESTRAL_GLYPH)
 		{
 			zukShield = event.getNpc();
+			return;
 		}
 
-		final InfernoNPC.Type infernoNPCType = InfernoNPC.Type.typeFromId(event.getNpc().getId());
+		final InfernoNPC.Type infernoNPCType = InfernoNPC.Type.typeFromId(npcId);
 
 		if (infernoNPCType == null)
 		{
 			return;
 		}
 
-		if (infernoNPCType == InfernoNPC.Type.ZUK)
+		switch (infernoNPCType)
 		{
-			log.debug("[INFERNO] Zuk spawn detected, not in final phase");
-			finalPhase = false;
-			zukShieldCornerTicks = -2;
-			zukShieldLastPosition = null;
-			zukShieldBase = null;
-		}
-		if (infernoNPCType == InfernoNPC.Type.HEALER_ZUK)
-		{
-			log.debug("[INFERNO] Final phase detected!");
-			finalPhase = true;
-
-			//decrement ticksTilNextAttack by 3
-			for (InfernoNPC infernoNPC : infernoNpcs)
-			{
-				if (infernoNPC.getType() == InfernoNPC.Type.ZUK)
+			case BLOB:
+				// Blobs need to be added to the end of the list because the prayer for their detection tick
+				// will be based on the upcoming attacks of other NPC's
+				infernoNpcs.add(new InfernoNPC(event.getNpc()));
+				return;
+			case MAGE:
+				if (zuk != null && spawnTimerInfoBox != null)
 				{
-					infernoNPC.setTicksTillNextAttack(infernoNPC.getTicksTillNextAttack() - 3);
+					spawnTimerInfoBox.reset();
+					spawnTimerInfoBox.run();
 				}
-			}
+				break;
+			case ZUK:
+				finalPhase = false;
+				zukShieldCornerTicks = -2;
+				zukShieldLastPosition = null;
+				zukShieldBase = null;
+				log.debug("[INFERNO] Zuk spawn detected, not in final phase");
+
+				if (config.spawnTimerInfobox())
+				{
+					zuk = event.getNpc();
+
+					if (spawnTimerInfoBox != null)
+					{
+						infoBoxManager.removeInfoBox(spawnTimerInfoBox);
+					}
+
+					spawnTimerInfoBox = new InfernoSpawnTimerInfobox(itemManager.getImage(ItemID.TZREKZUK), this);
+					infoBoxManager.addInfoBox(spawnTimerInfoBox);
+				}
+				break;
+			case HEALER_ZUK:
+				finalPhase = true;
+				ticksSinceFinalPhase = 1;
+				finalPhaseTick = true;
+				for (InfernoNPC infernoNPC : infernoNpcs)
+				{
+					if (infernoNPC.getType() == InfernoNPC.Type.ZUK)
+					{
+						infernoNPC.setTicksTillNextAttack(-1);
+					}
+				}
+				log.debug("[INFERNO] Final phase detected!");
+				break;
 		}
 
-		// Blobs need to be added to the end of the list because the prayer for their detection tick will be based
-		// on the upcoming attacks of other NPC's
-		if (infernoNPCType == InfernoNPC.Type.BLOB)
-		{
-			infernoNpcs.add(new InfernoNPC(event.getNpc()));
-		}
-		else
-		{
-			infernoNpcs.add(0, new InfernoNPC(event.getNpc()));
-		}
+		infernoNpcs.add(0, new InfernoNPC(event.getNpc()));
 	}
 
 	@Subscribe
@@ -309,9 +383,25 @@ public class InfernoPlugin extends Plugin
 			return;
 		}
 
-		if (event.getNpc().getId() == NpcID.ANCESTRAL_GLYPH)
+		int npcId = event.getNpc().getId();
+
+		switch (npcId)
 		{
-			zukShield = null;
+			case NpcID.ANCESTRAL_GLYPH:
+				zukShield = null;
+				return;
+			case NpcID.TZKALZUK:
+				zuk = null;
+
+				if (spawnTimerInfoBox != null)
+				{
+					infoBoxManager.removeInfoBox(spawnTimerInfoBox);
+				}
+
+				spawnTimerInfoBox = null;
+				break;
+			default:
+				break;
 		}
 
 		infernoNpcs.removeIf(infernoNPC -> infernoNPC.getNpc() == event.getNpc());
@@ -355,6 +445,16 @@ public class InfernoPlugin extends Plugin
 			overlayManager.remove(waveOverlay);
 			overlayManager.remove(jadOverlay);
 			overlayManager.remove(prayerOverlay);
+
+			zukShield = null;
+			zuk = null;
+
+			if (spawnTimerInfoBox != null)
+			{
+				infoBoxManager.removeInfoBox(spawnTimerInfoBox);
+			}
+
+			spawnTimerInfoBox = null;
 		}
 		else if (currentWaveNumber == -1)
 		{
@@ -404,7 +504,7 @@ public class InfernoPlugin extends Plugin
 	{
 		for (InfernoNPC infernoNPC : infernoNpcs)
 		{
-			infernoNPC.gameTick(client, lastLocation, finalPhase);
+			infernoNPC.gameTick(client, lastLocation, finalPhase, ticksSinceFinalPhase);
 
 			if (infernoNPC.getType() == InfernoNPC.Type.ZUK && zukShieldCornerTicks == -1)
 			{
@@ -721,17 +821,20 @@ public class InfernoPlugin extends Plugin
 			{
 				if (infernoNPC.getType() == InfernoNPC.Type.ZUK)
 				{
-					int ticksTilZukAttack = infernoNPC.getTicksTillNextAttack();
+					int ticksTilZukAttack = finalPhase ? infernoNPC.getTicksTillNextAttack() : infernoNPC.getTicksTillNextAttack() - 1;
 
-					if (ticksTilZukAttack < 0)
-					{
-						ticksTilZukAttack = 0;
-					}
-
-					//if the ticksTilZukAttack == 0, start to render the next safespot, as it is safe to start moving there
 					if (ticksTilZukAttack < 1)
 					{
-						ticksTilZukAttack = finalPhase ? 7 : 10;
+						if (finalPhase)
+						{
+							//if ticksTilZukAttack < 1 and finalPhase, must be due to finalPhase. don't render predicted safepot until next attack.
+							return;
+						}
+						else
+						{
+							//safe to start to render the next safespot
+							ticksTilZukAttack = 10;
+						}
 					}
 
 					//if zuk shield moving in positive direction
@@ -865,6 +968,82 @@ public class InfernoPlugin extends Plugin
 		{
 			centralNibbler = bestNibbler;
 		}
+	}
+
+	private void calculateSpawnTimerInfobox()
+	{
+		if (zuk == null || finalPhase || spawnTimerInfoBox == null)
+		{
+			return;
+		}
+
+		final int pauseHp = 600;
+		final int resumeHp = 480;
+
+		int hp = calculateNpcHp(zuk.getHealthRatio(), zuk.getHealthScale(), npcManager.getHealth(zuk.getId()));
+
+		if (hp <= 0)
+		{
+			return;
+		}
+
+		if (spawnTimerInfoBox.isRunning())
+		{
+			if (hp >= resumeHp && hp < pauseHp)
+			{
+				spawnTimerInfoBox.pause();
+			}
+		}
+		else
+		{
+			if (hp < resumeHp)
+			{
+				spawnTimerInfoBox.run();
+			}
+		}
+	}
+
+	private static int calculateNpcHp(int ratio, int health, int maxHp)
+	{
+		// See OpponentInfo Plugin
+		// Copyright (c) 2016-2018, Adam <Adam@sigterm.info>
+		// Copyright (c) 2018, Jordan Atwood <jordan.atwood423@gmail.com>
+
+		if (ratio < 0 || health <= 0 || maxHp == -1)
+		{
+			return -1;
+		}
+
+		int exactHealth = 0;
+
+		if (ratio > 0)
+		{
+			int minHealth = 1;
+			int maxHealth;
+
+			if (health > 1)
+			{
+				if (ratio > 1)
+				{
+					minHealth = (maxHp * (ratio - 1) + health - 2) / (health - 1);
+				}
+
+				maxHealth = (maxHp * ratio - 1) / (health - 1);
+
+				if (maxHealth > maxHp)
+				{
+					maxHealth = maxHp;
+				}
+			}
+			else
+			{
+				maxHealth = maxHp;
+			}
+
+			exactHealth = (minHealth + maxHealth + 1) / 2;
+		}
+
+		return exactHealth;
 	}
 
 	private boolean isPrayerHelper(InfernoNPC infernoNPC)

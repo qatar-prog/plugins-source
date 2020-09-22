@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2020, dutta64 <https://github.com/dutta64>
  * Copyright (c) 2019, kThisIsCvpv <https://github.com/kThisIsCvpv>
  * Copyright (c) 2019, ganom <https://github.com/Ganom>
  * Copyright (c) 2019, kyle <https://github.com/Kyleeld>
@@ -26,61 +27,67 @@
 
 package net.runelite.client.plugins.gauntlet;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.inject.Provides;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
-import javax.annotation.Nullable;
 import javax.inject.Inject;
-import lombok.AccessLevel;
+import javax.inject.Singleton;
 import lombok.Getter;
 import lombok.Setter;
 import net.runelite.api.Actor;
+import net.runelite.api.AnimationID;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.HeadIcon;
-import net.runelite.api.ItemID;
 import net.runelite.api.NPC;
-import net.runelite.api.NPCDefinition;
 import net.runelite.api.NpcID;
+import net.runelite.api.NullNpcID;
 import net.runelite.api.ObjectID;
 import net.runelite.api.Player;
 import net.runelite.api.Projectile;
 import net.runelite.api.ProjectileID;
 import net.runelite.api.SoundEffectID;
 import net.runelite.api.Varbits;
+import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.AnimationChanged;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.ProjectileSpawned;
-import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.queries.GameObjectQuery;
+import net.runelite.api.widgets.WidgetID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
-import net.runelite.client.events.NpcLootReceived;
-import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
-import static net.runelite.client.plugins.gauntlet.Hunllef.BossAttack.LIGHTNING;
-import static net.runelite.client.plugins.gauntlet.Hunllef.BossAttack.MAGIC;
-import static net.runelite.client.plugins.gauntlet.Hunllef.BossAttack.PRAYER;
-import static net.runelite.client.plugins.gauntlet.Hunllef.BossAttack.RANGE;
+import net.runelite.client.plugins.gauntlet.entity.Demiboss;
+import net.runelite.client.plugins.gauntlet.entity.Hunllef;
+import net.runelite.client.plugins.gauntlet.entity.Missile;
+import net.runelite.client.plugins.gauntlet.entity.Resource;
+import net.runelite.client.plugins.gauntlet.entity.Tornado;
+import net.runelite.client.plugins.gauntlet.overlay.Overlay;
+import net.runelite.client.plugins.gauntlet.overlay.OverlayGauntlet;
+import net.runelite.client.plugins.gauntlet.overlay.OverlayHunllef;
+import net.runelite.client.plugins.gauntlet.overlay.OverlayPrayerBox;
+import net.runelite.client.plugins.gauntlet.overlay.OverlayPrayerWidget;
+import net.runelite.client.plugins.gauntlet.overlay.OverlayTimer;
+import net.runelite.client.plugins.gauntlet.resource.ResourceManager;
 import net.runelite.client.ui.overlay.OverlayManager;
-import net.runelite.client.ui.overlay.infobox.Counter;
-import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import org.pf4j.Extension;
 
 @Extension
@@ -88,112 +95,168 @@ import org.pf4j.Extension;
 	name = "Gauntlet",
 	enabledByDefault = false,
 	description = "All-in-one plugin for the Gauntlet.",
-	tags = {"Gauntlet"},
-	type = PluginType.PVM
+	tags = {"gauntlet"},
+	type = PluginType.MINIGAME
 )
-@Getter(AccessLevel.PACKAGE)
+@Singleton
 public class GauntletPlugin extends Plugin
 {
-	private static final int BOW_ATTACK = 426;
-	private static final int STAFF_ATTACK = 1167;
-	private static final int LIGHTNING_ANIMATION = 8418;
-	private static final Set<Integer> TORNADO_NPC_IDS = ImmutableSet.of(9025, 9039);
-	private static final Set<Integer> MELEE_ANIMATIONS = ImmutableSet.of(395, 401, 400, 401, 386, 390, 422, 423, 401, 428, 440);
-	private static final Set<Integer> PLAYER_ANIMATIONS = ImmutableSet.of(395, 401, 400, 401, 386, 390, 422, 423, 401, 428, 440, 426, 1167);
-	private static final Set<Integer> HUNLLEF_MAGE_PROJECTILES = ImmutableSet.of(ProjectileID.HUNLLEF_MAGE_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_MAGE_ATTACK);
-	private static final Set<Integer> HUNLLEF_RANGE_PROJECTILES = ImmutableSet.of(ProjectileID.HUNLLEF_RANGE_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_RANGE_ATTACK);
-	private static final Set<Integer> HUNLLEF_PRAYER_PROJECTILES = ImmutableSet.of(ProjectileID.HUNLLEF_PRAYER_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_PRAYER_ATTACK);
-	private static final Set<Integer> HUNLLEF_PROJECTILES = ImmutableSet.of(ProjectileID.HUNLLEF_PRAYER_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_PRAYER_ATTACK,
-		ProjectileID.HUNLLEF_RANGE_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_RANGE_ATTACK, ProjectileID.HUNLLEF_MAGE_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_MAGE_ATTACK
+	private static final Set<Integer> MELEE_ANIM_IDS = Set.of(
+		AnimationID.ONEHAND_STAB_SWORD_ANIMATION, AnimationID.ONEHAND_SLASH_SWORD_ANIMATION,
+		AnimationID.ONEHAND_SLASH_AXE_ANIMATION, AnimationID.ONEHAND_CRUSH_PICKAXE_ANIMATION,
+		AnimationID.ONEHAND_CRUSH_AXE_ANIMATION, AnimationID.UNARMED_PUNCH_ANIMATION,
+		AnimationID.UNARMED_KICK_ANIMATION, AnimationID.ONEHAND_STAB_HALBERD_ANIMATION,
+		AnimationID.ONEHAND_SLASH_HALBERD_ANIMATION
 	);
-	private static final Set<Integer> HUNLLEF_NPC_IDS = ImmutableSet.of(NpcID.CRYSTALLINE_HUNLLEF, NpcID.CRYSTALLINE_HUNLLEF_9022, NpcID.CRYSTALLINE_HUNLLEF_9023,
-		NpcID.CRYSTALLINE_HUNLLEF_9024, NpcID.CORRUPTED_HUNLLEF, NpcID.CORRUPTED_HUNLLEF_9036, NpcID.CORRUPTED_HUNLLEF_9037, NpcID.CORRUPTED_HUNLLEF_9038
+
+	private static final Set<Integer> ATTACK_ANIM_IDS = new HashSet<>();
+
+	static
+	{
+		ATTACK_ANIM_IDS.addAll(MELEE_ANIM_IDS);
+		ATTACK_ANIM_IDS.add(AnimationID.BOW_ATTACK_ANIMATION);
+		ATTACK_ANIM_IDS.add(AnimationID.HIGH_LEVEL_MAGIC_ATTACK);
+	}
+
+	private static final Set<Integer> PROJECTILE_MAGIC_IDS = Set.of(
+		ProjectileID.HUNLLEF_MAGE_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_MAGE_ATTACK
 	);
-	private static final Set<Integer> RESOURCES = ImmutableSet.of(ObjectID.CRYSTAL_DEPOSIT, ObjectID.CORRUPT_DEPOSIT, ObjectID.PHREN_ROOTS,
-		ObjectID.PHREN_ROOTS_36066, ObjectID.FISHING_SPOT_36068, ObjectID.FISHING_SPOT_35971, ObjectID.GRYM_ROOT, ObjectID.GRYM_ROOT_36070,
+
+	private static final Set<Integer> PROJECTILE_RANGE_IDS = Set.of(
+		ProjectileID.HUNLLEF_RANGE_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_RANGE_ATTACK
+	);
+
+	private static final Set<Integer> PROJECTILE_PRAYER_IDS = Set.of(
+		ProjectileID.HUNLLEF_PRAYER_ATTACK, ProjectileID.HUNLLEF_CORRUPTED_PRAYER_ATTACK
+	);
+
+	private static final Set<Integer> PROJECTILE_IDS = new HashSet<>();
+
+	static
+	{
+		PROJECTILE_IDS.addAll(PROJECTILE_MAGIC_IDS);
+		PROJECTILE_IDS.addAll(PROJECTILE_RANGE_IDS);
+		PROJECTILE_IDS.addAll(PROJECTILE_PRAYER_IDS);
+	}
+
+	private static final Set<Integer> HUNLLEF_IDS = Set.of(
+		NpcID.CRYSTALLINE_HUNLLEF, NpcID.CRYSTALLINE_HUNLLEF_9022,
+		NpcID.CRYSTALLINE_HUNLLEF_9023, NpcID.CRYSTALLINE_HUNLLEF_9024,
+		NpcID.CORRUPTED_HUNLLEF, NpcID.CORRUPTED_HUNLLEF_9036,
+		NpcID.CORRUPTED_HUNLLEF_9037, NpcID.CORRUPTED_HUNLLEF_9038
+	);
+
+	private static final Set<Integer> TORNADO_IDS = Set.of(NullNpcID.NULL_9025, NullNpcID.NULL_9039);
+
+	private static final Set<Integer> DEMIBOSS_IDS = Set.of(
+		NpcID.CRYSTALLINE_BEAR, NpcID.CORRUPTED_BEAR,
+		NpcID.CRYSTALLINE_DARK_BEAST, NpcID.CORRUPTED_DARK_BEAST,
+		NpcID.CRYSTALLINE_DRAGON, NpcID.CORRUPTED_DRAGON
+	);
+
+	private static final Set<Integer> STRONG_NPC_IDS = Set.of(
+		NpcID.CRYSTALLINE_SCORPION, NpcID.CORRUPTED_SCORPION,
+		NpcID.CRYSTALLINE_UNICORN, NpcID.CORRUPTED_UNICORN,
+		NpcID.CRYSTALLINE_WOLF, NpcID.CORRUPTED_WOLF
+	);
+
+	private static final Set<Integer> WEAK_NPC_IDS = Set.of(
+		NpcID.CRYSTALLINE_BAT, NpcID.CORRUPTED_BAT,
+		NpcID.CRYSTALLINE_RAT, NpcID.CORRUPTED_RAT,
+		NpcID.CRYSTALLINE_SPIDER, NpcID.CORRUPTED_SPIDER
+	);
+
+	private static final Set<Integer> RESOURCE_IDS = Set.of(
+		ObjectID.CRYSTAL_DEPOSIT, ObjectID.CORRUPT_DEPOSIT,
+		ObjectID.PHREN_ROOTS, ObjectID.PHREN_ROOTS_36066,
+		ObjectID.FISHING_SPOT_36068, ObjectID.FISHING_SPOT_35971,
+		ObjectID.GRYM_ROOT, ObjectID.GRYM_ROOT_36070,
 		ObjectID.LINUM_TIRINUM, ObjectID.LINUM_TIRINUM_36072
 	);
-	private static final int GATHERING_HERB = 0;
-	private static final int GATHERING_CLOTH = 1;
+
+	private static final Set<Integer> UTILITY_IDS = Set.of(
+		ObjectID.SINGING_BOWL_35966, ObjectID.SINGING_BOWL_36063,
+		ObjectID.RANGE_35980, ObjectID.RANGE_36077,
+		ObjectID.WATER_PUMP_35981, ObjectID.WATER_PUMP_36078
+	);
 
 	@Inject
-	@Getter(AccessLevel.NONE)
 	private Client client;
 
 	@Inject
-	@Getter(AccessLevel.NONE)
 	private ClientThread clientThread;
 
 	@Inject
-	@Getter(AccessLevel.NONE)
-	private OverlayManager overlayManager;
-
-	@Inject
-	@Getter(AccessLevel.NONE)
-	private GauntletOverlay overlay;
-
-	@Inject
-	@Getter(AccessLevel.NONE)
-	private GauntletInfoBoxOverlay infoboxoverlay;
-
-	@Inject
-	@Getter(AccessLevel.NONE)
-	private GauntletConfig config;
-
-	@Inject
-	@Getter(AccessLevel.NONE)
 	private EventBus eventBus;
 
 	@Inject
-	@Getter(AccessLevel.NONE)
-	private GauntletTimer timer;
+	private GauntletConfig config;
 
 	@Inject
-	@Getter(AccessLevel.NONE)
+	private ResourceManager resourceManager;
+
+	@Inject
 	private SkillIconManager skillIconManager;
 
 	@Inject
-	@Getter(AccessLevel.NONE)
-	private net.runelite.client.plugins.gauntlet.GauntletCounter GauntletCounter;
+	private OverlayManager overlayManager;
 
-	@Setter(AccessLevel.PACKAGE)
-	@Nullable
+	@Inject
+	private OverlayTimer overlayTimer;
+
+	@Inject
+	private OverlayGauntlet overlayGauntlet;
+
+	@Inject
+	private OverlayHunllef overlayHunllef;
+
+	@Inject
+	private OverlayPrayerWidget overlayPrayerWidget;
+
+	@Inject
+	private OverlayPrayerBox overlayPrayerBox;
+
+	private Set<Overlay> overlays;
+
+	@Getter
+	private final Set<Resource> resources = new HashSet<>();
+
+	@Getter
+	private final Set<GameObject> utilities = new HashSet<>();
+
+	@Getter
+	private final Set<Tornado> tornadoes = new HashSet<>();
+
+	@Getter
+	private final Set<Demiboss> demibosses = new HashSet<>();
+
+	@Getter
+	private final Set<NPC> strongNpcs = new HashSet<>();
+
+	@Getter
+	private final Set<NPC> weakNpcs = new HashSet<>();
+
+	private final List<Set<?>> entitySets = Arrays.asList(resources, utilities, tornadoes, demibosses, strongNpcs, weakNpcs);
+
+	@Getter
+	private Missile missile;
+
+	@Getter
 	private Hunllef hunllef;
 
-	@Inject
-	private InfoBoxManager infoBoxManager;
+	@Getter
+	@Setter
+	private boolean wrongAttackStyle;
 
-	@Inject
-	private ItemManager itemManager;
+	@Getter
+	@Setter
+	private boolean switchWeapon;
 
-	private boolean completeStartup = false;
-	@Setter(AccessLevel.PACKAGE)
-	private boolean flash;
-	private boolean timerVisible = true;
-	private final Map<String, Integer> items = new HashMap<>();
-	private final Set<Missiles> projectiles = new HashSet<>();
-	private final Set<Resources> resources = new HashSet<>();
-	private Set<Tornado> tornadoes = new HashSet<>();
-	private Counter oreCounter;
-	private Counter woodCounter;
-	private Counter clothCounter;
-	private Counter fishCounter;
-	private Counter herbCounter;
-	private int oresGathered;
-	private int woodGathered;
-	private int clothGathered;
-	private int fishGathered;
-	private int herbGathered;
-	private int currentFarmingAction = -1;
-	private boolean countersVisible = false;
-	private int miningXp = 0;
-	private int farmingXp = 0;
-	private int woodcuttingXp = 0;
-	private int fishingXp = 0;
-	private boolean inGauntlet = false;
+	private boolean inGauntlet;
+	private boolean inHunllef;
 
 	@Provides
-	GauntletConfig getConfig(ConfigManager configManager)
+	GauntletConfig getConfig(final ConfigManager configManager)
 	{
 		return configManager.getConfig(GauntletConfig.class);
 	}
@@ -201,176 +264,294 @@ public class GauntletPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		initializeCounters();
-		overlayManager.add(overlay);
-		overlayManager.add(infoboxoverlay);
-		overlayManager.add(GauntletCounter);
-		timerVisible = config.displayTimerWidget();
-		timer.resetStates();
-		if (timerVisible)
+		if (overlays == null)
 		{
-			overlayManager.add(timer);
+			overlays = Set.of(overlayTimer, overlayGauntlet, overlayHunllef, overlayPrayerWidget, overlayPrayerBox);
 		}
-		if (client.getGameState() != GameState.STARTING && client.getGameState() != GameState.UNKNOWN)
+
+		if (client.getGameState() == GameState.LOGGED_IN)
 		{
-			completeStartup = false;
-			clientThread.invoke(() ->
-			{
-				timer.initStates();
-				completeStartup = true;
-			});
+			clientThread.invoke(this::pluginEnabled);
 		}
-		else
-		{
-			completeStartup = true;
-		}
-	}
-
-	private void addCounters()
-	{
-		if (!countersVisible)
-		{
-			infoBoxManager.addInfoBox(oreCounter);
-			infoBoxManager.addInfoBox(woodCounter);
-			infoBoxManager.addInfoBox(clothCounter);
-			infoBoxManager.addInfoBox(fishCounter);
-			infoBoxManager.addInfoBox(herbCounter);
-			countersVisible = true;
-		}
-	}
-
-	private void initializeCounters()
-	{
-		resetGatheringCounters();
-		oreCounter = new Counter(itemManager.getImage(ItemID.CORRUPTED_ORE), this, 0);
-		woodCounter = new Counter(itemManager.getImage(ItemID.PHREN_BARK_23878), this, 0);
-		clothCounter = new Counter(itemManager.getImage(ItemID.LINUM_TIRINUM_23876), this, 0);
-		fishCounter = new Counter(itemManager.getImage(ItemID.RAW_PADDLEFISH), this, 0);
-		herbCounter = new Counter(itemManager.getImage(ItemID.GRYM_LEAF_23875), this, 0);
-	}
-
-	private void resetGatheringCounters()
-	{
-		oresGathered = 0;
-		fishGathered = 0;
-		woodGathered = 0;
-		clothGathered = 0;
-		herbGathered = 0;
-		if (oreCounter != null)
-		{
-			updateCounters();
-		}
-	}
-
-	private void updateCounters()
-	{
-		oreCounter.setCount(oresGathered);
-
-		woodCounter.setCount(woodGathered);
-		clothCounter.setCount(clothGathered);
-		fishCounter.setCount(fishGathered);
-		herbCounter.setCount(herbGathered);
 	}
 
 	@Override
 	protected void shutDown()
 	{
-		timer.resetStates();
-		if (timerVisible)
-		{
-			overlayManager.remove(timer);
-			timerVisible = false;
-		}
-		overlayManager.remove(overlay);
-		overlayManager.remove(infoboxoverlay);
-		overlayManager.remove(GauntletCounter);
-		removeCounters();
-		resetGatheringCounters();
-		resources.clear();
-		projectiles.clear();
-		tornadoes.clear();
-		setHunllef(null);
-	}
+		eventBus.unregister(this);
 
-	private void removeCounters()
-	{
-		infoBoxManager.removeInfoBox(oreCounter);
-		infoBoxManager.removeInfoBox(woodCounter);
-		infoBoxManager.removeInfoBox(clothCounter);
-		infoBoxManager.removeInfoBox(fishCounter);
-		infoBoxManager.removeInfoBox(herbCounter);
-		countersVisible = false;
+		overlays.forEach(o -> overlayManager.remove(o));
+
+		inGauntlet = false;
+		inHunllef = false;
+
+		hunllef = null;
+		missile = null;
+		wrongAttackStyle = false;
+		switchWeapon = false;
+
+		overlayTimer.reset();
+		resourceManager.reset();
+
+		entitySets.forEach(Set::clear);
 	}
 
 	@Subscribe
-	private void onMenuOptionClicked(MenuOptionClicked menuOptionClicked)
+	private void onConfigChanged(final ConfigChanged event)
 	{
-		if (menuOptionClicked.getTarget().toUpperCase().contains("LINUM"))
+		if (!event.getGroup().equals("gauntlet"))
 		{
-			currentFarmingAction = GATHERING_CLOTH;
+			return;
 		}
-		if (menuOptionClicked.getTarget().toUpperCase().contains("GRYM"))
+
+		switch (event.getKey())
 		{
-			currentFarmingAction = GATHERING_HERB;
-		}
-	}
-
-	@Subscribe
-	private void onNpcLootReceived(NpcLootReceived npcLootReceived)
-	{
-		fishGathered += (int) npcLootReceived.getItems().stream().filter(item -> item.getId() == ItemID.RAW_PADDLEFISH).count();
-		herbGathered += (int) npcLootReceived.getItems().stream().filter(item -> item.getId() == ItemID.GRYM_LEAF || item.getId() == ItemID.GRYM_LEAF_23875).count();
-		updateCounters();
-	}
-
-
-	@Subscribe
-	private void onStatsChanged(StatChanged event)
-	{
-		switch (event.getSkill())
-		{
-			case MINING:
-				if (miningXp != event.getXp())
+			case "resourceIconSize":
+				if (!resources.isEmpty())
 				{
-					oresGathered++;
-					miningXp = event.getXp();
+					resources.forEach(r -> r.setIconSize(config.resourceIconSize()));
 				}
 				break;
-			case FISHING:
-				if (fishingXp != event.getXp())
+			case "resourceTracker":
+				if (inGauntlet && !inHunllef)
 				{
-					fishGathered++;
-					fishingXp = event.getXp();
+					resourceManager.reset();
+					resourceManager.init();
 				}
 				break;
-			case WOODCUTTING:
-				if (woodcuttingXp != event.getXp())
+			case "projectileIconSize":
+				if (missile != null)
 				{
-					woodGathered++;
-					woodcuttingXp = event.getXp();
+					missile.setIconSize(config.projectileIconSize());
 				}
 				break;
-			case FARMING:
-				if (farmingXp != event.getXp())
+			case "hunllefAttackStyleIconSize":
+				if (hunllef != null)
 				{
-					if (currentFarmingAction == GATHERING_HERB)
+					hunllef.setIconSize(config.hunllefAttackStyleIconSize());
+				}
+				break;
+			case "mirrorMode":
+				overlays.forEach(overlay -> {
+					overlay.determineLayer();
+
+					if (overlayManager.anyMatch(o -> o == overlay))
 					{
-						herbGathered++;
-						farmingXp = event.getXp();
+						overlayManager.remove(overlay);
+						overlayManager.add(overlay);
 					}
-					else if (currentFarmingAction == GATHERING_CLOTH)
-					{
-						clothGathered++;
-						farmingXp = event.getXp();
-					}
-				}
+				});
+				break;
+			default:
 				break;
 		}
-		updateCounters();
 	}
 
 	@Subscribe
-	private void onAnimationChanged(AnimationChanged event)
+	private void onVarbitChanged(final VarbitChanged event)
+	{
+		if (isHunllefVarbitSet())
+		{
+			if (!inHunllef)
+			{
+				initHunllef();
+			}
+		}
+		else if (isGauntletVarbitSet())
+		{
+			if (!inGauntlet)
+			{
+				initGauntlet();
+			}
+		}
+		else
+		{
+			if (inGauntlet || inHunllef)
+			{
+				shutDown();
+			}
+		}
+	}
+
+	private void onGameTick(final GameTick event)
+	{
+		if (hunllef == null)
+		{
+			return;
+		}
+
+		hunllef.decrementTicksUntilNextAttack();
+
+		if (missile != null && missile.getProjectile().getRemainingCycles() <= 0)
+		{
+			missile = null;
+		}
+
+		if (!tornadoes.isEmpty())
+		{
+			tornadoes.forEach(Tornado::updateTimeLeft);
+		}
+	}
+
+	private void onGameStateChanged(final GameStateChanged event)
+	{
+		switch (event.getGameState())
+		{
+			case LOADING:
+				resources.clear();
+				utilities.clear();
+				break;
+			case LOGIN_SCREEN:
+			case HOPPING:
+				shutDown();
+				break;
+		}
+	}
+
+	private void onWidgetLoaded(final WidgetLoaded event)
+	{
+		if (event.getGroupId() == WidgetID.GAUNTLET_TIMER_GROUP_ID)
+		{
+			overlayTimer.setGauntletStart();
+			resourceManager.init();
+		}
+	}
+
+	private void onGameObjectSpawned(final GameObjectSpawned event)
+	{
+		final GameObject gameObject = event.getGameObject();
+
+		final int id = gameObject.getId();
+
+		if (RESOURCE_IDS.contains(id))
+		{
+			resources.add(new Resource(gameObject, skillIconManager, config.resourceIconSize()));
+		}
+		else if (UTILITY_IDS.contains(id))
+		{
+			utilities.add(gameObject);
+		}
+	}
+
+	private void onGameObjectDespawned(final GameObjectDespawned event)
+	{
+		final GameObject gameObject = event.getGameObject();
+
+		final int id = gameObject.getId();
+
+		if (RESOURCE_IDS.contains(gameObject.getId()))
+		{
+			resources.removeIf(o -> o.getGameObject() == gameObject);
+		}
+		else if (UTILITY_IDS.contains(id))
+		{
+			utilities.remove(gameObject);
+		}
+	}
+
+	private void onNpcSpawned(final NpcSpawned event)
+	{
+		final NPC npc = event.getNpc();
+
+		final int id = npc.getId();
+
+		if (HUNLLEF_IDS.contains(id))
+		{
+			hunllef = new Hunllef(npc, skillIconManager, config.hunllefAttackStyleIconSize());
+		}
+		else if (TORNADO_IDS.contains(id))
+		{
+			tornadoes.add(new Tornado(npc));
+		}
+		else if (DEMIBOSS_IDS.contains(id))
+		{
+			demibosses.add(new Demiboss(npc));
+		}
+		else if (STRONG_NPC_IDS.contains(id))
+		{
+			strongNpcs.add(npc);
+		}
+		else if (WEAK_NPC_IDS.contains(id))
+		{
+			weakNpcs.add(npc);
+		}
+	}
+
+	private void onNpcDespawned(final NpcDespawned event)
+	{
+		final NPC npc = event.getNpc();
+
+		final int id = npc.getId();
+
+		if (HUNLLEF_IDS.contains(id))
+		{
+			hunllef = null;
+		}
+		else if (TORNADO_IDS.contains(id))
+		{
+			tornadoes.removeIf(t -> t.getNpc() == npc);
+		}
+		else if (DEMIBOSS_IDS.contains(id))
+		{
+			demibosses.removeIf(d -> d.getNpc() == npc);
+		}
+		else if (STRONG_NPC_IDS.contains(id))
+		{
+			strongNpcs.remove(npc);
+		}
+		else if (WEAK_NPC_IDS.contains(id))
+		{
+			weakNpcs.remove(npc);
+		}
+	}
+
+	private void onProjectileSpawned(final ProjectileSpawned event)
+	{
+		if (hunllef == null)
+		{
+			return;
+		}
+
+		final Projectile projectile = event.getProjectile();
+
+		final int id = projectile.getId();
+
+		if (!PROJECTILE_IDS.contains(id))
+		{
+			return;
+		}
+
+		missile = new Missile(projectile, skillIconManager, config.projectileIconSize());
+
+		hunllef.updateAttackCount();
+
+		if (PROJECTILE_PRAYER_IDS.contains(id) && config.hunllefPrayerAudio())
+		{
+			client.playSoundEffect(SoundEffectID.MAGIC_SPLASH_BOING);
+		}
+	}
+
+	private void onChatMessage(final ChatMessage event)
+	{
+		final ChatMessageType type = event.getType();
+
+		if (type == ChatMessageType.SPAM || type == ChatMessageType.GAMEMESSAGE)
+		{
+			resourceManager.parseChatMessage(event.getMessage());
+		}
+	}
+
+	private void onActorDeath(final ActorDeath event)
+	{
+		if (event.getActor() != client.getLocalPlayer())
+		{
+			return;
+		}
+
+		overlayTimer.onPlayerDeath();
+	}
+
+	private void onAnimationChanged(final AnimationChanged event)
 	{
 		if (hunllef == null)
 		{
@@ -379,243 +560,149 @@ public class GauntletPlugin extends Plugin
 
 		final Actor actor = event.getActor();
 
-		// This section handles the player counter.
-		if (actor instanceof Player && fightingBoss())
-		{
-			final Player player = (Player) actor;
-			final int anim = player.getAnimation();
+		final int animationId = actor.getAnimation();
 
-			if (player.getName() == null || client.getLocalPlayer() == null || !player.getName().equals(client.getLocalPlayer().getName()) || anim == -1 || !PLAYER_ANIMATIONS.contains(anim))
+		if (actor instanceof Player)
+		{
+			if (!ATTACK_ANIM_IDS.contains(animationId))
 			{
 				return;
 			}
 
-			NPCDefinition comp = hunllef.getNpc().getDefinition();
+			final boolean validAttack = isAttackAnimationValid(animationId);
 
-			if (comp == null || comp.getOverheadIcon() == null)
+			if (validAttack)
 			{
-				return;
-			}
+				wrongAttackStyle = false;
+				hunllef.updatePlayerAttackCount();
 
-			final HeadIcon prayer = comp.getOverheadIcon();
-
-			switch (prayer)
-			{
-				case MELEE:
-					if (MELEE_ANIMATIONS.contains(anim))
-					{
-						setFlash(true);
-						return;
-					}
-					hunllef.updatePlayerAttack();
-					break;
-				case RANGED:
-					if (BOW_ATTACK == anim)
-					{
-						setFlash(true);
-						return;
-					}
-					hunllef.updatePlayerAttack();
-					break;
-				case MAGIC:
-					if (STAFF_ATTACK == anim)
-					{
-						setFlash(true);
-						return;
-					}
-					hunllef.updatePlayerAttack();
-					break;
-			}
-		}
-
-		// This section handles the boss attack counter if they perform a lightning attack.
-		if (actor instanceof NPC)
-		{
-			final NPC npc = (NPC) actor;
-
-			if (npc.getAnimation() == LIGHTNING_ANIMATION)
-			{
-				hunllef.updateAttack(LIGHTNING);
-			}
-		}
-	}
-
-	@Subscribe
-	private void onConfigChanged(ConfigChanged event)
-	{
-		if (!event.getGroup().equals("Gauntlet"))
-		{
-			return;
-		}
-
-		if (event.getKey().equals("displayTimerWidget"))
-		{
-			if (config.displayTimerWidget() && !timerVisible)
-			{
-				overlayManager.add(timer);
-				timerVisible = true;
-			}
-			else if (!config.displayTimerWidget() && timerVisible)
-			{
-				overlayManager.remove(timer);
-				timerVisible = false;
-			}
-		}
-
-		if (event.getKey().equals("displayResources"))
-		{
-			if (config.displayGatheredResources() && this.startedGauntlet())
-			{
-				addCounters();
+				if (hunllef.getPlayerAttackCount() == 1)
+				{
+					switchWeapon = true;
+				}
 			}
 			else
 			{
-				removeCounters();
+				wrongAttackStyle = true;
+			}
+		}
+		else if (actor instanceof NPC)
+		{
+			if (animationId == AnimationID.HUNLEFF_TORNADO)
+			{
+				hunllef.updateAttackCount();
 			}
 		}
 	}
 
-	@Subscribe
-	private void onGameObjectDespawned(GameObjectDespawned event)
+	private boolean isAttackAnimationValid(final int animationId)
 	{
-		final GameObject obj = event.getGameObject();
-		if (RESOURCES.contains(obj.getId()))
-		{
-			resources.removeIf(object -> object.getGameObject() == obj);
-		}
-	}
+		final HeadIcon headIcon = hunllef.getNpc().getDefinition().getOverheadIcon();
 
-	@Subscribe
-	private void onGameObjectSpawned(GameObjectSpawned event)
-	{
-		final GameObject obj = event.getGameObject();
-		if (RESOURCES.contains(obj.getId()))
+		if (headIcon == null)
 		{
-			resources.add(new Resources(obj, event.getTile(), skillIconManager));
-		}
-	}
-
-	@Subscribe
-	private void onGameStateChanged(GameStateChanged event)
-	{
-		if (event.getGameState() == GameState.LOADING)
-		{
-			resources.clear();
-		}
-	}
-
-	@Subscribe
-	private void onGameTick(GameTick event)
-	{
-		// This handles the timer based on player health.
-		if (this.completeStartup)
-		{
-			timer.checkStates(false);
-		}
-		if (!tornadoes.isEmpty())
-		{
-			tornadoes.forEach(Tornado::updateTimeLeft);
-		}
-		if (hunllef != null)
-		{
-			if (hunllef.getTicksUntilAttack() > 0)
-			{
-				hunllef.setTicksUntilAttack(hunllef.getTicksUntilAttack() - 1);
-			}
-		}
-	}
-
-	@Subscribe
-	private void onNpcDespawned(NpcDespawned event)
-	{
-		final NPC npc = event.getNpc();
-		if (HUNLLEF_NPC_IDS.contains(npc.getId()))
-		{
-			setHunllef(null);
-			resetGatheringCounters();
-		}
-		else if (TORNADO_NPC_IDS.contains(npc.getId()))
-		{
-			tornadoes.removeIf(tornado -> tornado.getNpc() == npc);
-		}
-	}
-
-	@Subscribe
-	private void onNpcSpawned(NpcSpawned event)
-	{
-		final NPC npc = event.getNpc();
-		if (HUNLLEF_NPC_IDS.contains(npc.getId()))
-		{
-			setHunllef(new Hunllef(npc, skillIconManager));
-		}
-		else if (TORNADO_NPC_IDS.contains(npc.getId()))
-		{
-			tornadoes.add(new Tornado(npc));
-		}
-	}
-
-	@Subscribe
-	private void onProjectileSpawned(ProjectileSpawned event)
-	{
-		if (hunllef == null)
-		{
-			return;
+			return true;
 		}
 
-		final Projectile proj = event.getProjectile();
-
-		if (HUNLLEF_PROJECTILES.contains(proj.getId()))
+		switch (headIcon)
 		{
-			projectiles.add(new Missiles(proj, skillIconManager));
-			if (HUNLLEF_MAGE_PROJECTILES.contains(proj.getId()))
-			{
-				hunllef.updateAttack(MAGIC);
-			}
-			else if (HUNLLEF_PRAYER_PROJECTILES.contains(proj.getId()))
-			{
-				hunllef.updateAttack(PRAYER);
-				if (config.uniquePrayerAudio())
+			case MELEE:
+				if (MELEE_ANIM_IDS.contains(animationId))
 				{
-					client.playSoundEffect(SoundEffectID.MAGIC_SPLASH_BOING);
+					return false;
 				}
-			}
-			else if (HUNLLEF_RANGE_PROJECTILES.contains(proj.getId()))
-			{
-				hunllef.updateAttack(RANGE);
-			}
+				break;
+			case RANGED:
+				if (animationId == AnimationID.BOW_ATTACK_ANIMATION)
+				{
+					return false;
+				}
+				break;
+			case MAGIC:
+				if (animationId == AnimationID.HIGH_LEVEL_MAGIC_ATTACK)
+				{
+					return false;
+				}
+				break;
 		}
+
+		return true;
 	}
 
-	@Subscribe
-	private void onVarbitChanged(VarbitChanged event)
+	private void pluginEnabled()
 	{
-		if (client.getVar(Varbits.GAUNTLET_ENTERED) == 1 && !inGauntlet)
+		if (isGauntletVarbitSet())
 		{
-			resetGatheringCounters();
-			inGauntlet = true;
+			overlayTimer.setGauntletStart();
+			resourceManager.init();
+			addSpawnedEntities();
+			initGauntlet();
 		}
-		if (this.completeStartup)
+
+		if (isHunllefVarbitSet())
 		{
-			timer.checkStates(true);
-		}
-		if (startedGauntlet() && config.displayGatheredResources())
-		{
-			addCounters();
-		}
-		else
-		{
-			removeCounters();
-			inGauntlet = false;
+			initHunllef();
 		}
 	}
 
-	boolean fightingBoss()
+	private void addSpawnedEntities()
 	{
-		return client.getVar(Varbits.GAUNTLET_FINAL_ROOM_ENTERED) == 1;
+		for (final GameObject gameObject : new GameObjectQuery().result(client))
+		{
+			onGameObjectSpawned(new GameObjectSpawned(null, gameObject));
+		}
+
+		for (final NPC npc : client.getNpcs())
+		{
+			onNpcSpawned(new NpcSpawned(npc));
+		}
 	}
 
-	boolean startedGauntlet()
+	private void initGauntlet()
+	{
+		inGauntlet = true;
+
+		overlayManager.add(overlayTimer);
+		overlayManager.add(overlayGauntlet);
+
+		eventBus.subscribe(GameStateChanged.class, this, this::onGameStateChanged);
+		eventBus.subscribe(WidgetLoaded.class, this, this::onWidgetLoaded);
+		eventBus.subscribe(GameObjectSpawned.class, this, this::onGameObjectSpawned);
+		eventBus.subscribe(GameObjectDespawned.class, this, this::onGameObjectDespawned);
+		eventBus.subscribe(NpcSpawned.class, this, this::onNpcSpawned);
+		eventBus.subscribe(NpcDespawned.class, this, this::onNpcDespawned);
+		eventBus.subscribe(ChatMessage.class, this, this::onChatMessage);
+	}
+
+	private void initHunllef()
+	{
+		inHunllef = true;
+
+		overlayTimer.setHunllefStart();
+		resourceManager.reset();
+
+		overlayManager.remove(overlayGauntlet);
+		overlayManager.add(overlayHunllef);
+		overlayManager.add(overlayPrayerWidget);
+		overlayManager.add(overlayPrayerBox);
+
+		eventBus.unregister(this);
+		eventBus.subscribe(GameStateChanged.class, this, this::onGameStateChanged);
+		eventBus.subscribe(NpcSpawned.class, this, this::onNpcSpawned);
+		eventBus.subscribe(NpcDespawned.class, this, this::onNpcDespawned);
+		eventBus.subscribe(GameTick.class, this, this::onGameTick);
+		eventBus.subscribe(ProjectileSpawned.class, this, this::onProjectileSpawned);
+		eventBus.subscribe(AnimationChanged.class, this, this::onAnimationChanged);
+		eventBus.subscribe(ActorDeath.class, this, this::onActorDeath);
+	}
+
+	private boolean isGauntletVarbitSet()
 	{
 		return client.getVar(Varbits.GAUNTLET_ENTERED) == 1;
+	}
+
+	private boolean isHunllefVarbitSet()
+	{
+		return client.getVar(Varbits.GAUNTLET_FINAL_ROOM_ENTERED) == 1;
 	}
 }

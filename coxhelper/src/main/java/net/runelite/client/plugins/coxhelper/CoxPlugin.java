@@ -28,33 +28,29 @@
 package net.runelite.client.plugins.coxhelper;
 
 import com.google.inject.Provides;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
 import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Actor;
 import net.runelite.api.AnimationID;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GraphicID;
-import net.runelite.api.GraphicsObject;
 import net.runelite.api.NPC;
 import net.runelite.api.NpcID;
 import net.runelite.api.Player;
+import net.runelite.api.Prayer;
 import net.runelite.api.Projectile;
 import net.runelite.api.ProjectileID;
 import net.runelite.api.Varbits;
-import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.GameObjectDespawned;
+import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
@@ -65,6 +61,7 @@ import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
@@ -85,57 +82,37 @@ public class CoxPlugin extends Plugin
 {
 	private static final int ANIMATION_ID_G1 = 430;
 	private static final Pattern TP_REGEX = Pattern.compile("You have been paired with <col=ff0000>(.*)</col>! The magical power will enact soon...");
-
+	private final Map<NPC, NPCContainer> npcContainers = new HashMap<>();
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private Client client;
-
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private ChatMessageManager chatMessageManager;
-
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private CoxOverlay coxOverlay;
-
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private CoxInfoBox coxInfoBox;
-
+	@Inject
+	@Getter(AccessLevel.NONE)
+	private CoxDebugBox coxDebugBox;
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private CoxConfig config;
-
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private OverlayManager overlayManager;
-
 	@Inject
 	@Getter(AccessLevel.NONE)
 	private EventBus eventBus;
-
-	private boolean handCripple;
-	private boolean runOlm;
+	@Inject
+	private Olm olm;
+	//other
 	private int vanguards;
 	private boolean tektonActive;
-	private NPC hand;
-	private NPC Olm_NPC;
-	private List<WorldPoint> Olm_Heal = new ArrayList<>();
-	private List<WorldPoint> Olm_TP = new ArrayList<>();
-	private Set<Victim> victims = new HashSet<>();
-	private Actor acidTarget;
-	private int crippleTimer = 45;
-	private int teleportTicks = 10;
 	private int tektonAttackTicks;
-	private int OlmPhase = 0;
-	private int Olm_TicksUntilAction = -1;
-	private int Olm_ActionCycle = -1; //4:0 = auto 3:0 = null 2:0 = auto 1:0 = spec + actioncycle =4
-	private int Olm_NextSpec = -1; // 1= crystals 2=lightnig 3=portals 4= heal hand if p4
-	private Map<NPC, NPCContainer> npcContainer = new HashMap<>();
-	@Setter(AccessLevel.PACKAGE)
-	private PrayAgainst prayAgainstOlm;
-	private long lastPrayTime;
-	private int sleepcount = 0;
 
 	@Provides
 	CoxConfig getConfig(ConfigManager configManager)
@@ -146,29 +123,24 @@ public class CoxPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		overlayManager.add(coxOverlay);
-		overlayManager.add(coxInfoBox);
-		handCripple = false;
-		hand = null;
-		Olm_TP.clear();
-		prayAgainstOlm = null;
-		victims.clear();
-		crippleTimer = 45;
-		teleportTicks = 10;
-		vanguards = 0;
+		this.overlayManager.add(this.coxOverlay);
+		this.overlayManager.add(this.coxInfoBox);
+		this.overlayManager.add(this.coxDebugBox);
+		this.olm.hardRest();
 	}
 
 	@Override
 	protected void shutDown()
 	{
-		overlayManager.remove(coxOverlay);
-		overlayManager.remove(coxInfoBox);
+		this.overlayManager.remove(this.coxOverlay);
+		this.overlayManager.remove(this.coxInfoBox);
+		this.overlayManager.remove(this.coxDebugBox);
 	}
 
 	@Subscribe
 	private void onChatMessage(ChatMessage event)
 	{
-		if (!inRaid())
+		if (!this.inRaid())
 		{
 			return;
 		}
@@ -179,7 +151,7 @@ public class CoxPlugin extends Plugin
 
 			if (tpMatcher.matches())
 			{
-				for (Player player : client.getPlayers())
+				for (Player player : this.client.getPlayers())
 				{
 					final String rawPlayerName = player.getName();
 
@@ -189,7 +161,7 @@ public class CoxPlugin extends Plugin
 
 						if (fixedPlayerName.equals(Text.sanitize(tpMatcher.group(1))))
 						{
-							victims.add(new Victim(player, Victim.Type.TELEPORT));
+							this.olm.getVictims().add(new Victim(player, Victim.Type.TELEPORT));
 						}
 					}
 				}
@@ -198,42 +170,26 @@ public class CoxPlugin extends Plugin
 			switch (Text.standardize(event.getMessageNode().getValue()))
 			{
 				case "the great olm rises with the power of acid.":
+					olm.setPhaseType(Olm.PhaseType.ACID);
+					break;
 				case "the great olm rises with the power of crystal.":
+					olm.setPhaseType(Olm.PhaseType.CRYSTAL);
+					break;
 				case "the great olm rises with the power of flame.":
-				case "the great olm is giving its all. this is its final stand.":
-					if (!runOlm)
-					{
-						Olm_ActionCycle = -1;
-						Olm_TicksUntilAction = 4;
-					}
-					else
-					{
-						Olm_ActionCycle = -1;
-						Olm_TicksUntilAction = 3;
-					}
-					OlmPhase = 0;
-					runOlm = true;
-					crippleTimer = 45;
-					Olm_NextSpec = -1;
+					olm.setPhaseType(Olm.PhaseType.FLAME);
 					break;
 				case "the great olm fires a sphere of aggression your way. your prayers have been sapped.":
 				case "the great olm fires a sphere of aggression your way.":
-					prayAgainstOlm = PrayAgainst.MELEE;
-					lastPrayTime = System.currentTimeMillis();
+					this.olm.setPrayer(Prayer.PROTECT_FROM_MELEE);
 					break;
 				case "the great olm fires a sphere of magical power your way. your prayers have been sapped.":
 				case "the great olm fires a sphere of magical power your way.":
-					prayAgainstOlm = PrayAgainst.MAGIC;
-					lastPrayTime = System.currentTimeMillis();
+					this.olm.setPrayer(Prayer.PROTECT_FROM_MAGIC);
 					break;
 				case "the great olm fires a sphere of accuracy and dexterity your way. your prayers have been sapped.":
 				case "the great olm fires a sphere of accuracy and dexterity your way.":
-					prayAgainstOlm = PrayAgainst.RANGED;
-					lastPrayTime = System.currentTimeMillis();
+					this.olm.setPrayer(Prayer.PROTECT_FROM_MISSILES);
 					break;
-				case "the great olm's left claw clenches to protect itself temporarily.":
-					handCripple = true;
-
 			}
 		}
 	}
@@ -241,7 +197,7 @@ public class CoxPlugin extends Plugin
 	@Subscribe
 	private void onProjectileSpawned(ProjectileSpawned event)
 	{
-		if (!inRaid())
+		if (!this.inRaid())
 		{
 			return;
 		}
@@ -251,15 +207,17 @@ public class CoxPlugin extends Plugin
 		switch (projectile.getId())
 		{
 			case ProjectileID.OLM_MAGE_ATTACK:
-				prayAgainstOlm = PrayAgainst.MAGIC;
-				lastPrayTime = System.currentTimeMillis();
+				this.olm.setPrayer(Prayer.PROTECT_FROM_MAGIC);
 				break;
 			case ProjectileID.OLM_RANGE_ATTACK:
-				prayAgainstOlm = PrayAgainst.RANGED;
-				lastPrayTime = System.currentTimeMillis();
+				this.olm.setPrayer(Prayer.PROTECT_FROM_MISSILES);
 				break;
 			case ProjectileID.OLM_ACID_TRAIL:
-				acidTarget = projectile.getInteracting();
+				Actor actor = projectile.getInteracting();
+				if (actor instanceof Player)
+				{
+					this.olm.getVictims().add(new Victim((Player) actor, Victim.Type.ACID));
+				}
 				break;
 		}
 	}
@@ -267,7 +225,7 @@ public class CoxPlugin extends Plugin
 	@Subscribe
 	private void onSpotAnimationChanged(SpotAnimationChanged event)
 	{
-		if (!inRaid())
+		if (!this.inRaid())
 		{
 			return;
 		}
@@ -281,27 +239,14 @@ public class CoxPlugin extends Plugin
 
 		if (player.getSpotAnimation() == GraphicID.OLM_BURN)
 		{
-			int add = 0;
-
-			for (Victim victim : victims)
-			{
-				if (victim.getPlayer().getName().equals(player.getName()))
-				{
-					add++;
-				}
-			}
-
-			if (add == 0)
-			{
-				victims.add(new Victim(player, Victim.Type.BURN));
-			}
+			this.olm.getVictims().add(new Victim(player, Victim.Type.BURN));
 		}
 	}
 
 	@Subscribe
 	private void onNpcSpawned(NpcSpawned event)
 	{
-		if (!inRaid())
+		if (!this.inRaid())
 		{
 			return;
 		}
@@ -316,37 +261,31 @@ public class CoxPlugin extends Plugin
 			case NpcID.TEKTON_7545:
 			case NpcID.TEKTON_ENRAGED:
 			case NpcID.TEKTON_ENRAGED_7544:
-				npcContainer.put(npc, new NPCContainer(npc));
-				tektonAttackTicks = 27;
+				this.npcContainers.put(npc, new NPCContainer(npc));
+				this.tektonAttackTicks = 27;
 				break;
 			case NpcID.MUTTADILE:
 			case NpcID.MUTTADILE_7562:
 			case NpcID.MUTTADILE_7563:
 			case NpcID.GUARDIAN:
 			case NpcID.GUARDIAN_7570:
-				npcContainer.put(npc, new NPCContainer(npc));
+				this.npcContainers.put(npc, new NPCContainer(npc));
 				break;
 			case NpcID.VANGUARD:
 			case NpcID.VANGUARD_7526:
 			case NpcID.VANGUARD_7527:
 			case NpcID.VANGUARD_7528:
 			case NpcID.VANGUARD_7529:
-				vanguards++;
-				npcContainer.put(npc, new NPCContainer(npc));
+				this.vanguards++;
+				this.npcContainers.put(npc, new NPCContainer(npc));
 				break;
-			case NpcID.GREAT_OLM_LEFT_CLAW:
-			case NpcID.GREAT_OLM_LEFT_CLAW_7555:
-				hand = npc;
-				break;
-			case NpcID.GREAT_OLM:
-				Olm_NPC = npc;
 		}
 	}
 
 	@Subscribe
 	private void onNpcDespawned(NpcDespawned event)
 	{
-		if (!inRaid())
+		if (!this.inRaid())
 		{
 			return;
 		}
@@ -368,9 +307,9 @@ public class CoxPlugin extends Plugin
 			case NpcID.GUARDIAN_7570:
 			case NpcID.GUARDIAN_7571:
 			case NpcID.GUARDIAN_7572:
-				if (npcContainer.remove(event.getNpc()) != null && !npcContainer.isEmpty())
+				if (this.npcContainers.remove(event.getNpc()) != null && !this.npcContainers.isEmpty())
 				{
-					npcContainer.remove(event.getNpc());
+					this.npcContainers.remove(event.getNpc());
 				}
 				break;
 			case NpcID.VANGUARD:
@@ -378,15 +317,11 @@ public class CoxPlugin extends Plugin
 			case NpcID.VANGUARD_7527:
 			case NpcID.VANGUARD_7528:
 			case NpcID.VANGUARD_7529:
-				if (npcContainer.remove(event.getNpc()) != null && !npcContainer.isEmpty())
+				if (this.npcContainers.remove(event.getNpc()) != null && !this.npcContainers.isEmpty())
 				{
-					npcContainer.remove(event.getNpc());
+					this.npcContainers.remove(event.getNpc());
 				}
-				vanguards--;
-				break;
-			case NpcID.GREAT_OLM_RIGHT_CLAW_7553:
-			case NpcID.GREAT_OLM_RIGHT_CLAW:
-				handCripple = false;
+				this.vanguards--;
 				break;
 		}
 	}
@@ -394,51 +329,23 @@ public class CoxPlugin extends Plugin
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
-		if (!inRaid())
+		if (!this.inRaid())
 		{
-			OlmPhase = 0;
-			sleepcount = 0;
-			Olm_Heal.clear();
-			npcContainer.clear();
-			victims.clear();
-			Olm_NPC = null;
-			hand = null;
-			prayAgainstOlm = null;
-			runOlm = false;
+			this.olm.hardRest();
 			return;
 		}
 
-		handleNpcs();
-		handleVictims();
+		this.handleNpcs();
 
-		if (handCripple)
+		if (this.olm.isActive())
 		{
-			crippleTimer--;
-			if (crippleTimer <= 0)
-			{
-				handCripple = false;
-				crippleTimer = 45;
-			}
-		}
-
-		if (runOlm)
-		{
-			handleOlm();
-		}
-	}
-
-	private void handleVictims()
-	{
-		if (victims.size() > 0)
-		{
-			victims.forEach(Victim::updateTicks);
-			victims.removeIf(victim -> victim.getTicks() <= 0);
+			this.olm.update();
 		}
 	}
 
 	private void handleNpcs()
 	{
-		for (NPCContainer npcs : getNpcContainer().values())
+		for (NPCContainer npcs : this.getNpcContainers().values())
 		{
 			switch (npcs.getNpc().getId())
 			{
@@ -458,7 +365,7 @@ public class CoxPlugin extends Plugin
 						case AnimationID.TEKTON_ENRAGE_AUTO1:
 						case AnimationID.TEKTON_ENRAGE_AUTO2:
 						case AnimationID.TEKTON_ENRAGE_AUTO3:
-							tektonActive = true;
+							this.tektonActive = true;
 							if (npcs.getTicksUntilAttack() < 1)
 							{
 								npcs.setTicksUntilAttack(4);
@@ -466,15 +373,15 @@ public class CoxPlugin extends Plugin
 							break;
 						case AnimationID.TEKTON_FAST_AUTO1:
 						case AnimationID.TEKTON_FAST_AUTO2:
-							tektonActive = true;
+							this.tektonActive = true;
 							if (npcs.getTicksUntilAttack() < 1)
 							{
 								npcs.setTicksUntilAttack(3);
 							}
 							break;
 						case AnimationID.TEKTON_ANVIL:
-							tektonActive = false;
-							tektonAttackTicks = 47;
+							this.tektonActive = false;
+							this.tektonAttackTicks = 47;
 							if (npcs.getTicksUntilAttack() < 1)
 							{
 								npcs.setTicksUntilAttack(15);
@@ -513,95 +420,77 @@ public class CoxPlugin extends Plugin
 					break;
 			}
 		}
-		if (tektonActive && tektonAttackTicks > 0)
+		if (this.tektonActive && this.tektonAttackTicks > 0)
 		{
-			tektonAttackTicks--;
-		}
-	}
-
-	private void handleOlm()
-	{
-		Olm_Heal.clear();
-		Olm_TP.clear();
-		client.clearHintArrow();
-		sleepcount--;
-		if (Olm_TicksUntilAction == 1)
-		{
-			if (Olm_ActionCycle == 1)
-			{
-				Olm_ActionCycle = 4;
-				Olm_TicksUntilAction = 4;
-				if (Olm_NextSpec == 1)
-				{
-					if (OlmPhase == 1)
-					{
-						Olm_NextSpec = 4; // 4 = heal 3= cry 2 = lightn 1 = swap
-					}
-					else
-					{
-						Olm_NextSpec = 3;
-					}
-				}
-				else
-				{
-					Olm_NextSpec--;
-				}
-			}
-			else
-			{
-				if (Olm_ActionCycle != -1)
-				{
-					Olm_ActionCycle--;
-				}
-				Olm_TicksUntilAction = 4;
-			}
-		}
-		else
-		{
-			Olm_TicksUntilAction--;
-		}
-
-		for (GraphicsObject o : client.getGraphicsObjects())
-		{
-			if (sleepcount <= 0)
-			{
-				if (o.getId() == 1338)
-				{
-					Olm_TicksUntilAction = 1;
-					Olm_NextSpec = 2;
-					Olm_ActionCycle = 4; //spec=1 null=3
-					sleepcount = 5;
-				}
-				if (o.getId() == 1356)
-				{
-					Olm_TicksUntilAction = 4;
-					Olm_NextSpec = 1;
-					Olm_ActionCycle = 4; //spec=1 null=3
-					sleepcount = 50;
-				}
-			}
-			if (o.getId() == GraphicID.OLM_TELEPORT)
-			{
-				Olm_TP.add(WorldPoint.fromLocal(client, o.getLocation()));
-			}
-			if (o.getId() == GraphicID.OLM_HEAL)
-			{
-				Olm_Heal.add(WorldPoint.fromLocal(client, o.getLocation()));
-			}
-			if (!Olm_TP.isEmpty())
-			{
-				teleportTicks--;
-				if (teleportTicks <= 0)
-				{
-					client.clearHintArrow();
-					teleportTicks = 10;
-				}
-			}
+			this.tektonAttackTicks--;
 		}
 	}
 
 	boolean inRaid()
 	{
-		return client.getVar(Varbits.IN_RAID) == 1;
+		return this.client.getVar(Varbits.IN_RAID) == 1;
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!event.getGroup().equals("Cox"))
+		{
+			return;
+		}
+
+		if (event.getKey().equals("mirrorMode"))
+		{
+			this.coxOverlay.determineLayer();
+			this.coxInfoBox.determineLayer();
+			this.coxDebugBox.determineLayer();
+			this.overlayManager.remove(this.coxOverlay);
+			this.overlayManager.remove(this.coxInfoBox);
+			this.overlayManager.remove(this.coxDebugBox);
+			this.overlayManager.add(this.coxOverlay);
+			this.overlayManager.add(this.coxInfoBox);
+			this.overlayManager.add(this.coxDebugBox);
+		}
+	}
+
+	@Subscribe
+	public void onGameObjectSpawned(GameObjectSpawned event)
+	{
+		if (event.getGameObject() == null)
+		{
+			return;
+		}
+
+		int id = event.getGameObject().getId();
+		switch (id)
+		{
+			case Olm.HEAD_GAMEOBJECT_RISING:
+			case Olm.HEAD_GAMEOBJECT_READY:
+				if (this.olm.getHead() == null)
+				{
+					this.olm.startPhase();
+				}
+				this.olm.setHead(event.getGameObject());
+				break;
+			case Olm.LEFT_HAND_GAMEOBJECT_RISING:
+			case Olm.LEFT_HAND_GAMEOBJECT_READY:
+				this.olm.setHand(event.getGameObject());
+				break;
+		}
+	}
+
+	@Subscribe
+	public void onGameObjectDespawned(GameObjectDespawned event)
+	{
+		if (event.getGameObject() == null)
+		{
+			return;
+		}
+
+		int id = event.getGameObject().getId();
+		if (id == Olm.HEAD_GAMEOBJECT_READY)
+		{
+			this.olm.setHead(null);
+		}
 	}
 }

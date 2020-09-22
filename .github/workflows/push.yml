@@ -48,7 +48,7 @@ jobs:
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Upload client artifacts to local maven
-        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal --console=plain
+        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal :runescape-api:publishToMavenLocal :injection-annotations:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Make gradlew executable (plugins)
@@ -56,15 +56,15 @@ jobs:
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Assembling plugins
-        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble --console=plain
+        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble :specialcounter:assemble --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Building plugins
-        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build --stacktrace -x test -x checkstyleMain --console=plain
+        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build :specialcounter:build --stacktrace -x test -x checkstyleMain --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Upload plugins artifacts to local maven
-        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal --console=plain
+        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal :specialcounter:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Make gradlew executable
@@ -118,7 +118,7 @@ jobs:
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Upload client artifacts to local maven
-        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal --console=plain
+        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal :runescape-api:publishToMavenLocal :injection-annotations:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Make gradlew executable (plugins)
@@ -126,15 +126,15 @@ jobs:
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Assembling plugins
-        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble --console=plain
+        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble :specialcounter:assemble --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Building plugins
-        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build --stacktrace -x test -x checkstyleMain --console=plain
+        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build :specialcounter:build --stacktrace -x test -x checkstyleMain --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Upload plugins artifacts to local maven
-        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal --console=plain
+        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal :specialcounter:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Make gradlew executable
@@ -188,7 +188,7 @@ jobs:
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Upload client artifacts to local maven
-        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal --console=plain
+        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal :runescape-api:publishToMavenLocal :injection-annotations:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Make gradlew executable (plugins)
@@ -196,15 +196,15 @@ jobs:
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Assembling plugins
-        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble --console=plain
+        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble :specialcounter:assemble --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Building plugins
-        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build --stacktrace -x test -x checkstyleMain --console=plain
+        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build :specialcounter:build --stacktrace -x test -x checkstyleMain --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Upload plugins artifacts to local maven
-        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal --console=plain
+        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal :specialcounter:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Make gradlew executable
@@ -258,7 +258,7 @@ jobs:
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Upload client artifacts to local maven
-        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal --console=plain
+        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal :runescape-api:publishToMavenLocal :injection-annotations:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Make gradlew executable (plugins)
@@ -266,15 +266,15 @@ jobs:
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Assembling plugins
-        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble --console=plain
+        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble :specialcounter:assemble --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Building plugins
-        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build --stacktrace -x test -x checkstyleMain --console=plain
+        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build :specialcounter:build --stacktrace -x test -x checkstyleMain --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Upload plugins artifacts to local maven
-        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal --console=plain
+        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal :specialcounter:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Make gradlew executable
@@ -343,7 +343,7 @@ jobs:
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Upload client artifacts to local maven
-        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal --console=plain
+        run: ./gradlew :http-api:publishToMavenLocal :runelite-api:publishToMavenLocal :runelite-client:publishToMavenLocal :runescape-api:publishToMavenLocal :injection-annotations:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/runelite
 
       - name: Make gradlew executable (plugins)
@@ -351,15 +351,15 @@ jobs:
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Assembling plugins
-        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble --console=plain
+        run: ./gradlew :attackstyles:assemble :xptracker:assemble :clanchat:assemble :specialcounter:assemble --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Building plugins
-        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build --stacktrace -x test -x checkstyleMain --console=plain
+        run: ./gradlew :attackstyles:build :xptracker:build :clanchat:build :specialcounter:build --stacktrace -x test -x checkstyleMain --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Upload plugins artifacts to local maven
-        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal --console=plain
+        run: ./gradlew :attackstyles:publishToMavenLocal :xptracker:publishToMavenLocal :clanchat:publishToMavenLocal :specialcounter:publishToMavenLocal --console=plain
         working-directory: /home/runner/work/plugins-source/plugins
 
       - name: Make gradlew executable

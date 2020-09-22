@@ -52,11 +52,13 @@ import net.runelite.api.events.ProjectileSpawned;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
 import net.runelite.client.ui.overlay.OverlayManager;
 import org.pf4j.Extension;
+import static net.runelite.client.plugins.aoewarnings.AoeWarningConfig.*;
 
 @Extension
 @PluginDescriptor(
@@ -321,7 +323,7 @@ public class AoeWarningPlugin extends Plugin
 			case VORKATH_POISON_POOL:
 			case VORKATH_SPAWN:
 			case VORKATH_TICK_FIRE:
-				return notify ? config.isVorkathNotifyEnabled() : config.isVorkathEnabled();
+				return notify ? config.isVorkathNotifyEnabled() : config.vorkathModes().contains(VorkathMode.of(projectileInfo));
 			case VETION_LIGHTNING:
 				return notify ? config.isVetionNotifyEnabled() : config.isVetionEnabled();
 			case CHAOS_FANATIC:
@@ -354,6 +356,25 @@ public class AoeWarningPlugin extends Plugin
 		}
 
 		return false;
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!event.getGroup().equals("aoe"))
+		{
+			return;
+		}
+
+		if (event.getKey().equals("mirrorMode"))
+		{
+			bombOverlay.determineLayer();
+			coreOverlay.determineLayer();
+			overlayManager.remove(bombOverlay);
+			overlayManager.remove(coreOverlay);
+			overlayManager.add(bombOverlay);
+			overlayManager.add(coreOverlay);
+		}
 	}
 
 	private void reset()

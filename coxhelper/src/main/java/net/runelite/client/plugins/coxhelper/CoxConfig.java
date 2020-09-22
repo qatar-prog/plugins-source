@@ -41,22 +41,15 @@ import net.runelite.client.config.Units;
 
 public interface CoxConfig extends Config
 {
-	@Getter
-	@AllArgsConstructor
-	enum FontStyle
+	@ConfigItem(
+		name = "Mirror Mode Compatibility?",
+		keyName = "mirrorMode",
+		description = "Should we show the overlay on Mirror Mode?",
+		position = 0
+	)
+	default boolean mirrorMode()
 	{
-		BOLD("Bold", Font.BOLD),
-		ITALIC("Italic", Font.ITALIC),
-		PLAIN("Plain", Font.PLAIN);
-
-		private String name;
-		private int font;
-
-		@Override
-		public String toString()
-		{
-			return getName();
-		}
+		return false;
 	}
 
 	@ConfigTitleSection(
@@ -263,9 +256,33 @@ public interface CoxConfig extends Config
 		return true;
 	}
 
+	@ConfigItem(
+		position = 15,
+		keyName = "olmDebug",
+		name = "Olm Debug Info",
+		description = "Dev tool to show info about olm",
+		titleSection = "olmTitle"
+	)
+	default boolean olmDebug()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		position = 16,
+		keyName = "olmPShowPhase",
+		name = "Olm Phase Type",
+		description = "Will highlight olm depending on which phase type is active. Red=Flame Green=Acid Purple=Crystal",
+		titleSection = "olmTitle"
+	)
+	default boolean olmPShowPhase()
+	{
+		return false;
+	}
+
 	@ConfigTitleSection(
 		keyName = "colors",
-		position = 15,
+		position = 17,
 		name = "Colors",
 		description = ""
 	)
@@ -275,7 +292,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 16,
+		position = 18,
 		keyName = "muttaColor",
 		name = "Muttadile Tile Color",
 		description = "Change hit area tile color for muttadiles",
@@ -289,7 +306,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 17,
+		position = 19,
 		keyName = "guardColor",
 		name = "Guardians Tile Color",
 		description = "Change safespot area tile color for Guardians",
@@ -303,7 +320,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 18,
+		position = 20,
 		keyName = "tektonColor",
 		name = "Tekton Tile Color",
 		description = "Change hit area tile color for Tekton",
@@ -317,7 +334,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 19,
+		position = 21,
 		keyName = "burnColor",
 		name = "Burn Victim Color",
 		description = "Changes tile color for burn victim.",
@@ -331,7 +348,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 20,
+		position = 22,
 		keyName = "acidColor",
 		name = "Acid Victim Color",
 		description = "Changes tile color for acid victim.",
@@ -345,7 +362,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 21,
+		position = 23,
 		keyName = "tpColor",
 		name = "Teleport Target Color",
 		description = "Changes tile color for teleport target.",
@@ -358,9 +375,23 @@ public interface CoxConfig extends Config
 		return new Color(193, 255, 245);
 	}
 
+	@ConfigItem(
+		position = 24,
+		keyName = "olmSpecialColor",
+		name = "Olm Special Color",
+		description = "Changes color of a special on Olm's tick counter",
+		titleSection = "colors",
+		hidden = true,
+		unhide = "olmTick"
+	)
+	default Color olmSpecialColor()
+	{
+		return new Color(89, 255, 0);
+	}
+
 	@ConfigTitleSection(
 		keyName = "text",
-		position = 22,
+		position = 25,
 		name = "Text",
 		description = ""
 	)
@@ -370,7 +401,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 23,
+		position = 26,
 		keyName = "fontStyle",
 		name = "Font Style",
 		description = "Bold/Italics/Plain",
@@ -386,7 +417,7 @@ public interface CoxConfig extends Config
 		max = 20
 	)
 	@ConfigItem(
-		position = 24,
+		position = 27,
 		keyName = "textSize",
 		name = "Text Size",
 		description = "Text Size for Timers.",
@@ -399,7 +430,7 @@ public interface CoxConfig extends Config
 	}
 
 	@ConfigItem(
-		position = 25,
+		position = 28,
 		keyName = "shadows",
 		name = "Shadows",
 		description = "Adds Shadows to text.",
@@ -408,5 +439,23 @@ public interface CoxConfig extends Config
 	default boolean shadows()
 	{
 		return true;
+	}
+
+	@Getter
+	@AllArgsConstructor
+	enum FontStyle
+	{
+		BOLD("Bold", Font.BOLD),
+		ITALIC("Italic", Font.ITALIC),
+		PLAIN("Plain", Font.PLAIN);
+
+		private final String name;
+		private final int font;
+
+		@Override
+		public String toString()
+		{
+			return this.getName();
+		}
 	}
 }

@@ -34,13 +34,14 @@ import net.runelite.api.Client;
 import net.runelite.api.NPC;
 import net.runelite.api.WorldType;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.NpcDespawned;
-import net.runelite.api.events.PlayerDeath;
 import net.runelite.api.events.SpotAnimationChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -225,11 +226,27 @@ public class EffectTimersPlugin extends Plugin
 	}
 
 	@Subscribe
-	public void onPlayerDeath(PlayerDeath event)
+	public void onActorDeath(ActorDeath event)
 	{
 		for (TimerType type : TimerType.values())
 		{
-			timerManager.setTimerFor(event.getPlayer(), type, new Timer(this, null));
+			timerManager.setTimerFor(event.getActor(), type, new Timer(this, null));
+		}
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!event.getGroup().equals("effecttimers"))
+		{
+			return;
+		}
+
+		if (event.getKey().equals("mirrorMode"))
+		{
+			overlay.determineLayer();
+			overlayManager.remove(overlay);
+			overlayManager.add(overlay);
 		}
 	}
 }

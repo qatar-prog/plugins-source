@@ -247,7 +247,7 @@ public class MultiIndicatorsPlugin extends Plugin
 		inDeadman = client.getWorldType().stream().anyMatch(x ->
 			x == WorldType.DEADMAN);
 		inPvp = client.getWorldType().stream().anyMatch(x ->
-			x == WorldType.PVP || x == WorldType.HIGH_RISK);
+			x == WorldType.PVP);
 
 		Rectangle sceneRect = new Rectangle(
 			client.getBaseX() + 1, client.getBaseY() + 1,
@@ -353,6 +353,16 @@ public class MultiIndicatorsPlugin extends Plugin
 			event.getKey().equals("wildernessLevelLines"))
 		{
 			findLinesInScene();
+		}
+
+		if (event.getKey().equals("mirrorMode"))
+		{
+			overlay.determineLayer();
+			minimapOverlay.determineLayer();
+			overlayManager.remove(overlay);
+			overlayManager.remove(minimapOverlay);
+			overlayManager.add(overlay);
+			overlayManager.add(minimapOverlay);
 		}
 	}
 
